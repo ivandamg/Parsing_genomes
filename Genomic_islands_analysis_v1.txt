@@ -1,0 +1,93 @@
+
+
+############################################################################################################################################
+################# PROTOCOL FOR GENOMIC ISLANDS ANALYSIS V1 
+############################################################################################################################################
+############################################################################################################################################
+
+#################################################################
+######## 1. DETECT GENOMIC ISLANDS ON GENOME WITH COLOMBO #######
+#########                 SIGI_CRF-AUTO             #############
+#################################################################
+
+# 1. Installation
+##################
+ Download the software on https://www.uni-goettingen.de/en/research/185810.html
+
+to open java application 
+
+./Colombo
+
+# doesnt work on bash... :(
+
+
+# 2. put input Genome.fna all ouputs with the same name as genome copy/paste
+
+
+#3 all results will be in colombo../external/..
+
+#4 Result in gff. normal= from genome  Putative= from horizontal gene transfer
+
+
+# attention: incomplete assemblies as A118 cannot be processed by this software, searching window higher than scaffold size
+
+#info of amount of exogenous DNA in genome
+/home/imateus/software/Colombo_v_4.0_release/Colombo/history/HistoryLog.txt
+
+# transfrom gb to embl.
+
+Extract GCF_names of files
+			ls *.fna | cut -d'_' -f2,3
+in text wrangles write code to extract .gb
+
+for i in $(ls *.gb*); do echo $i; perl ~/Documents/EPFL/Scripts/gb2embl.pl $i $(echo $i | cut -d'.' -f1,2).embl ; done
+
+# do sigiHMM
+for i in $(ls ~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/HGT_SigiHMM/*.embl); do echo $i; ./SigiHMM input=~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/HGT_SigiHMM/$i output=~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/HGT_SigiHMM/$(echo $i| cut -d'_' -f1)_SigiHMM.embl gff=~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/HGT_SigiHMM/$(echo $i| cut -d'_' -f1)_SigiHMM.gff ; done
+
+
+# nb of exogenous DNA sites
+for i in $(ls *.gff); do echo $i; cat $i | grep "PUTAL"| wc -l ;done
+
+#########################################################################
+######## 2. DETECT GENOMIC ISLANDS ON GENOME WITH IslandPath-DIMOB ######
+#########################################################################
+
+
+
+
+######################################################################
+######## 3. DETECT GENOMIC ISLANDS ON GENOME WITH Alien_Hunter  ######
+######################################################################
+for i in $(ls ~/Documents/EPFL/A_baumannii/Analysis/Mauve_alignments/all_genomes_mauve/*.fna);do echo $i ; ./alien_hunter $i $(echo $i | cut -d'/' -f10 | sed 's/_genomic\.fna/\.embl/') ; done
+
+# result in alien_ĥunter folder
+
+./alien_hunter ~/Documents/EPFL/A_baumannii/Analysis/Mauve_alignments/all_genomes_mauve/GCF_001261895.2_R2090_genomic.fna GCF_001261895.2_R2090.embl
+
+
+
+for i in $(ls *.embl); do echo $i; cat $i | grep "misc_feature" | wc -l ;done
+
+
+# total of exogenous regions
+
+for i in $(ls  *.embl); do echo $i; cat $i | grep "misc_feature" | cut -d' ' -f8 | sed 's/\.\./\t/' | awk '{print ($2 - $1)}' | awk '{s+=$1} END {print s}' ; done
+
+# total length
+for i in $(ls G*genomic.fna); do echo $i; cat $i | grep -v ">" | wc -m ;done
+
+
+
+# then transform to gff
+
+
+Make script to do this and import in R.
+
+for i in $(ls *.embl);do echo $i;
+cat $i | grep "misc_feature"| cut -d' ' -f8 | sed 's/\.\./\t/' > tmp_coord;
+cat $i | grep "misc_feature"| cut -d' ' -f8 | sed 's/\.\./\t/' | awk '{print ($2 - $1)}' > tmp_length;
+cat $i  | grep "note" | cut -d'"' -f2 > tmp_details;
+cat $i  | grep "score"| cut -d'=' -f2 > tmp_score;ls
+
+ paste tmp_coord tmp_length tmp_score tmp_details > $(echo $i | cut -d'.' -f1,2)_IslandHunter.bed; rm tmp* ;done

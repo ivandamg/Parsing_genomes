@@ -1,0 +1,278 @@
+
+
+############################################################################################################################################
+################# PROTOCOL FOR COMPETENCE GENE ANALYSIS V2. 
+############################################################################################################################################
+############################################################################################################################################
+
+#########################################
+######## 1. Blast PFAM to Genomes  ######
+#########################################
+
+# 1. make db of each genome
+
+# 2. download competence genes sequences
+download all sequences by pfam on acinetobacter
+file Competence_genes_Acinetobactersp_by_PFAM.fa
+# reduce nb of sequences, by selecting only different ones, not repeated.
+
+# 3. make tblastx 
+ # query file = Competence_genes_1seq_by_PFAM.fa
+
+## output file =blast_Comp_1seq_byPFAM_GCA_000189735.2_ASM18973v2.xml
+
+#########################################
+######## 2. Summary info of blasts  ######
+#########################################
+
+# by using bash make a table with nb of blast hit per sample and genome.
+
+# this give info about: 
+	1 blast hit complete seq.
+	2 blast hits with gap > 100 < 10000  interruption by IS
+	2 blast hits with gap less than <100 insertion or gene duplication
+	more than 1 blast hits in different part gene duplication
+
+# plot the info in R. pheatmap
+
+
+#########################################
+######## 3. Extract sequence of competence genes ######
+#########################################
+
+# for all the genes
+####################
+
+# extract sequence for each competence gene for each sample
+# in folder of blast output ~/Documents/EPFL/A_baumannii/Analysis/ALL_competence_genes
+
+
+# star of command
+
+for i in $(ls V3*.xml); do echo $i ;
+star="$(cat $i | cut -f2 |sed 's/^/blastdbcmd /g' | sed 's/ / -entry /g' | awk '$3="\x27"$3"\x27"')";
+# reorder coordinates;
+range="$(cat $i | cut -f9,10 | while read line; do echo $line | sed 's/ /\n/g' | sort | gawk '{line=line " " $0} END {print line}' ; done | sed 's/^ /-range/g' | sed 's/ /-/' | sed 's/range/range /')" ;
+# extract name and add db part;
+# nb of lines in xml;
+lines="$(cat $i | wc -l)";
+export lines # put variable in open environment ;
+db="$(echo $i | cut -d'_' -f4,5,6,7 | sed 's/\.xml/_db/g' | sed 's/^/-db /' | perl -ne 'print $_ x $ENV{lines}')"; 
+# to save in file;
+nam1="$(cat $i | cut -f1  | cut -f1 -d'/')";
+nam2="$(echo $i | cut -d'_' -f4,5,6,7 | sed 's/\.xml//g' | perl -ne 'print $_ x $ENV{lines}')";
+end="$(paste <(echo "$nam1") <(echo "$nam2") --delimiters '_' | sed 's/^/> Seq_/'| sed 's/$/.fa/' )";
+# aseemble everything ;
+paste <(echo "$star") <(echo "$db") <(echo "$range") <(echo "$end") --delimiters ' '; done | grep 'ssb'
+
+
+
+# in folder of db ~/Documents/EPFL/A_baumannii/Analysis/genomes_blast_db
+copy paste in directory containing db and blast results..
+
+# move to folder
+mv Seq*.fa ~/Documents/EPFL/A_baumannii/Analysis/ALL_competence_genes/Seq_All_competence/
+
+
+
+# then for genes that display multiple blast in different regions
+#################################################################
+
+# manually change output name by adding blast1, blast2, blast...
+blastdbcmd -entry 'CU468230.2' -db GCA_000069205.1_ASM6920v1_db -range 821029-823036 > Seq_ComAblastxxxx_PF03772_A0A0A3W996.1_GCA_000069205.1_ASM6920v1.fa
+
+
+# then for genes that display 2 blasts in the same region
+#################################################################
+
+# manually change coordinates of start end comprising 
+blastdbcmd -entry 'CU468230.2' -db GCA_000069205.1_ASM6920v1_db -range XXXXXX-823036 > Seq_ComA_PF03772_A0A0A3W996.1_GCA_000069205.1_ASM6920v1.fa
+blastdbcmd -entry 'CU468230.2' -db GCA_000069205.1_ASM6920v1_db -range 821029-XXXXXX > Seq_ComA_PF03772_A0A0A3W996.1_GCA_000069205.1_ASM6920v1.fa
+
+blastdbcmd -entry 'CU468230.2' -db GCA_000069205.1_ASM6920v1_db -range 821029-823036 > Seq_ComA_PF03772_A0A0A3W996.1_GCA_000069205.1_ASM6920v1.fa
+
+
+## CHANGE SEQUENCES NAMES by putting header on it
+#####################################################
+
+### not good anymore
+for i in $( ls Seq_*.fa); do name="$(echo $i | cut -d'_' -f2,3,4)" ; name2="$(cat $i | grep ">" | cut -d' ' -f1,4,5,6 | sed 's/,//g')";fname="$(paste <(echo "$name") <(echo "$name2") --delimiters '_' |sed 's/>/_/g' |sed 's/^/>/g')" ;sed "s/>.*/$fname/" $i > $(echo $i | sed 's/.fa/_Goodheader.fa/g') ; done
+
+# use this
+for i in $(ls RecA*.fa); do cat $i | sed "s/>.*/>${i} /" | sed 's/\.fa//'| sed 's/,//' | sed 's/whole genome shotgun sequence//' > $(echo $i)2; done
+
+#########################################
+#### 4. CDS per sample using GENEMARK ######
+#########################################
+
+
+perl /home/imateus/software/genemark_suite_linux_64/gmsuite/gmsn.pl ALL_comM_chrom.fa --prok --name ALL_comM_chrom --fnn --format GFF --output ALL_comM_chrom.gff
+
+
+# make output in a subdirectory
+for i in $(ls Seq_VC0032_comM_XH860.fa2); do echo $i; mkdir GeneMark_$(echo $i | cut -d'.' -f1) ; cd GeneMark_$(echo $i | cut -d'.' -f1) ; perl /home/imateus/software/genemark_suite_linux_64/gmsuite/gmsn.pl ../$i --prok --name $(echo $i | cut -d'.' -f1 | cut -d'_' -f3,4) --fnn --format GFF --output $(echo $i | cut -d'.' -f1 | cut -d'_' -f3,4).gff ; mv *.gff* ../ ;  cd .. ; done
+#########################################
+#### 4. Summary statistics of seqs ######
+#########################################
+
+# min length
+for i in $(ls Seq_ComA*_Goodheader.fa); do cat $i | grep -v ">" | wc -m; done | sort -n | head -1
+# max length
+for i in $(ls Seq_ComA*_Goodheader.fa); do cat $i | grep -v ">" | wc -m; done | sort -n | tail -1
+# average length
+for i in $(ls Seq_ComA*_Goodheader.fa); do cat $i | grep -v ">" | wc -m; done | awk '{ total += $1 } END { print total/NR }'
+
+#########################################
+#### 5. SNP's Statistics           ######
+#########################################
+
+USE MAUVE. 
+put all sequences of the same gene
+then print SNP file.
+
+ater this :
+#nb SNPs 
+cat MSA_ComA.snp | cut -f1  | wc -l
+#nb deletion & SNPs 
+cat MSA_ComA.snp | cut -f1  | grep "-" |wc -l
+#nb samples 
+cat MSA_ComA.snp | cut -f1 | head -10 | tail -1 | wc -m
+
+
+#########################################
+#### 6. IS in gene                ######
+#########################################
+
+# look at samples that show more than one hit blast, and gap more than 100b
+# go to https://www-is.biotoul.fr/blast.php
+# And paste sequence NOT HEADER
+
+# report all the IS finded in gene
+
+
+#########################################
+## 7.Look what is inside insertion ######
+#########################################
+
+#######---> CDS 
+# run genemarks 
+http://exon.gatech.edu/GeneMark/genemarks.cgi
+input sequence
+output in GFF.
+
+#######---> Annotation
+in blast2go
+
+
+#######---> Representation in R
+script Competence_genes_inAbaum...R
+
+
+#########################################
+#### 8. phylogeny                  ######
+#########################################
+
+# 1. Diminish header sequence length in sublime
+
+# 2. Convert to nex
+http://users-birc.au.dk/biopv/php/fabox/fasta2mrbayes.php#
+
+
+# 3. eliminate , from header
+cat ComA_Allseq.nex | sed 's/,//g' > ComA_Allseq2.nex
+
+
+# 4 Run in mrbayes      mb
+~/software/mrbayes-3.2.6/src/mb 
+
+bsub -q long -L /bin/bash -J mrBAYEScomA -u ivan.mateusgonzalez@epfl.ch -N -R "rusage[mem=12000]" -M 12000000 "module add Phylogeny/mrbayes/3.2.6;mb -i ComA_Allseq2.nex; sumt Conformat=simple Outputname=Tree_ComA_Allseq2.nex"
+
+execute ComA_Allseq.nex
+lset nst=2
+#mcmc ngen=1000000 samplefreq=25 printfreq=100 diagnfreq=1000 temp=0.25
+#sump
+sumt Conformat=simple Outputname=Tree_ComA_Allseq.nex
+
+
+#########################################
+#### 9. ANTIMICROBIAL RESISTANCE DB######
+#########################################
+
+
+
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_aminoglycoside_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/aminoglycoside.fsa ; done
+
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_colistin_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/colistin.fsa ; done
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_fusidicacid_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/fusidicacid.fsa ; done
+
+
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_nitroimidazole_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/nitroimidazole.fsa ; done
+
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_phenicol_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/phenicol.fsa ; done
+
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_rifampicin_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/rifampicin.fsa ; done
+
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_tetracycline_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/tetracycline.fsa ; done
+
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_vancomycin_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/vancomycin.fsa ; done
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_beta-lactamase_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/beta-lactamase.fsa ; done
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_fosfomycin_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/fosfomycin.fsa ; done
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_macrolide_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/macrolide.fsa ; done
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_oxazolidinone_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/oxazolidinone.fsa ; done
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_quinolone_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/quinolone.fsa ; done
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_sulphonamide_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/sulphonamide.fsa ; done
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_MDR_trimethoprim_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/trimethoprim.fsa ; done
+
+mkdir MDR
+mv blast_MDR* MDR/
+
+#########################################
+#### 9. PHAGES DB   ######
+#########################################
+cd ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_PHAGES_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/db_genomes_all/Phages_prophage_virus_db/Phage_seq_v2/ALL_STRAINS_PROPHAGES.fasta ; done
+
+
+
+mv blast_PHAGES* Phages_prophage_virus_db/
+
+
+#########################################
+#### 9. In ComM seq   ######
+#########################################
+cd ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_ComM_V2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/db_genomes_all/V2_all_comM/ALL_V2_comM.fa ; done
+
+
+
+
+mv blast_ComM* ~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/db_genomes_all/V2_all_comM/MDR_comM
+
+#########################################
+#### 9. In PLAMIDS   ######
+#########################################
+cd ~/Documents/EPFL/Antimicrobial_resistance/CGE_datasets/resfinder_DB/
+
+a=0;for i in $( ls *.nin); do echo $(echo $i| sed 's/\.nin//g') ; blastn -db $(echo $i| sed 's/\.nin//g') -outfmt 6 -evalue 1e-50  -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out  blast_PlasmidsV2_$(echo $i| sed 's/_db.nin//').xml -query ~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/db_genomes_all/PLASMIDS/ALL_PLASMIDS.fna ; done
+
+
+
+
+mv blast_PlasmidsV2_* ~/Documents/EPFL/A_baumannii/Reference_sequences/ALL_Abaum_vf/ALL_Analysis_V2/db_genomes_all/PLASMIDS/
