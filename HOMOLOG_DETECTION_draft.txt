@@ -1,0 +1,183 @@
+Target list of nosocomial pathogens (Gram + /- )
+Get protein list of genes involved in DNA-uptake. (Gram + / - )
+Find presence and sequence of each protein in the different nosocomial pathogens
+For each species get other strains.
+Blast sequence of DNA-uptake genes on the other strains.
+Determine, which have the complete DNA-uptake machinery.
+Evaluate IS
+Evaluate Prophages
+Evaluate MDR. (HMM)
+
+Download genomes
+
+Select assemblies 
+Get info in excel 
+Change name by using info.
+
+************************************************************************************************
+***** COMPETENCE GENES DETECTION WITH DEFAULT COMP GENES************
+************************************************************************************************
+
+
+HMMER3 analysis.
+
+2 steps process:
+
+1.Look at similar sequences within species: 
+Create hmm profile
+Get genomes of other strains
+Do hmm search on protein files of other species.
+2. Look at similar sequences in other species.
+1. Align sequences within same species
+2. Create hmm profile
+3. Get genomes and strains on othe species
+4. Do Hmm search    
+
+
+
+
+Hmmer very usefull to find homologs in other species by alligning proteins within the same species. And using this as hmm profile.
+
+Methodology.
+
+Look at proteins in different species:
+
+Extract all compressed files in genome folder
+gunzip */GCF_*.faa.gz
+gunzip */GCF_*[0-9]_genomic.fna.gz
+
+Cpopy protein file and assembly file on front folder
+cp */*.faa .
+cp */*[0-9]_genomic.fna .
+Make summary table of strains and change names in excel
+for i in $(ls */*assembly_stats.txt); do echo $i  | cat $i | grep "Assembly level"  | cut -d ':' -f2 | sed 's/Genome//g' ; done
+for i in $(ls */*assembly_stats.txt); do echo $i  | cat $i | grep "total-length"  | grep -v 'Primary' | grep -v 'sequence' | cut -d'-' -f2 | sed 's/length//'; done
+for i in $(ls */*assembly_stats.txt); do echo $i  | cat $i | grep "total-gap-length" | grep -v 'of' | cut -d'-' -f3 | sed 's/length//' ; done
+for i in $(ls */*assembly_report.txt); do echo $i  | cat $i | grep "strain=" | cut -d':' -f2 | sed 's/strain=//' | sed 's/\//_/g' | sed 's/,/_/g' | tr '\(' ' ' | tr '\)' ' ' | sed 's/ //g' ; done
+ for i in $(ls */*assembly_report.txt); do echo $i  | cat $i | grep "Assembly name"  | cut -d':' -f2; done
+
+[ALTERNATIVE] Create new annotation with prokka
+for i in $(ls *.fna); do echo $i;  ~/software/prokka-1.12/prokka/bin/prokka --outdir Annotation_$(echo $i | cut -d'_' -f3) --genus $(echo $i | cut -d'_' -f1) --species $(echo $i | cut -d'_' -f2) --strain $(echo $i | cut -d'_' -f3) --locustag Ab_$(echo $i | cut -d'_' -f3) --prefix $(echo $i | cut -d'_' -f1,2,3)_Prokka --rfam --usegenus $i  ;  done
+
+
+[ALTERNATIVE] Create new annotation with prokka VITAL-IT
+for i in $(ls Vibrio*.fna); do echo $i; bsub -q normal -L /bin/bash -J $(echo $i | cut -d'_' -f3) -u ivan.mateusgonzalez@epfl.ch -n 8 -R "rusage[mem=12000]" -M 12000000 -N  "module add UHTS/Analysis/prokka/1.12; module add UHTS/Analysis/rnammer/1.2;  module add UHTS/Analysis/LMAT/1.2.6; module add SequenceAnalysis/HMM-Profile/hmmer/3.1b2; prokka --outdir Annotation_$(echo $i | cut -d'_' -f3) --genus Vibrio --species cholerae --strain $(echo $i | cut -d'_' -f3)  --cpus 8 --locustag VC_$(echo $i | cut -d'_' -f3) --prefix $(echo $i | cut -d'_' -f1,2,3)_Prokka --rfam --usegenus $i "; done
+
+
+
+Make protein databases of genomes
+mkdir db_prot_genomes
+a=0;for i in $(ls *.faa); do echo $(echo $i | cut -d'_' -f1,2,3) ;makeblastdb -dbtype prot -in $i -parse_seqids -out db_prot_genomes/$(echo $i | cut -d'_' -f1,2,3)_db ; done
+
+Blastp proteins
+a=0;for i in $(ls *.faa); do echo $(echo $i | cut -d'_' -f1,2,3) ;blastp -db db_prot_genomes/$(echo $i | cut -d'_' -f1,2,3)_db -outfmt 6 -evalue 1e-8 -show_gis -num_alignments 1 -max_hsps 20 -num_threads 30 -out db_prot_genomes/blastProt_DNA-uptake_$(echo $i | cut -d'_' -f1,2,3).xml -query ~/Documents/EPFL/Competence_in_NosoPath/Reference_Competence_Proteins/List_competence_Acinetobacter_baylyi_prot_V2.faa ; done
+
+Extract sequences of proteins only complete ones
+for gene in $(echo ACIAD0360_pilD ACIAD0361_pilC ACIAD0362_pilB ACIAD0558_pilF ACIAD0695_fimT ACIAD0911_pilU ACIAD0912_pilT ACIAD3314_comF ACIAD3315_comE ACIAD3316_comC ACIAD3318_comB ACIAD3319_pilV ACIAD3321_fimU ACIAD3338_comP ACIAD3355_comQ ACIAD3356_comL ACIAD3357_comO ACIAD3359_comN ACIAD3360_pilM ACIAD2639_comA ACIAD3064_comEA ACIAD0209_dprA ACIAD1385_recA ACIAD3449_ssb ACIAD0242_comM) ; do echo $gene
+for i in $(ls blastProt*.xml); do echo $i ;
+star="$(cat $i | cut -f2 |sed 's/^/blastdbcmd /g' | sed 's/ / -entry /g' | awk '$3="\x27"$3"\x27"')";
+# reorder coordinates;
+range="$(cat $i | cut -f9,10 | while read line; do echo $line | sed 's/ /\n/g' | sort | gawk '{line=line " " $0} END {print line}' ; done | sed 's/^ /-range/g' | sed 's/ /-/' | sed 's/range/range /')" ;
+# extract name and add db part;
+# nb of lines in xml;
+lines="$(cat $i | wc -l)";
+export lines # put variable in open environment ;
+db="$(echo $i | cut -d'_' -f3,4,5,6,7 | sed 's/\.xml/_db/g' | sed 's/^/-db /' | perl -ne 'print $_ x $ENV{lines}')";
+# to save in file;
+nam1="$(cat $i | cut -f1  | cut -f1 -d'/')";
+nam2="$(echo $i | cut -d'_' -f3,4,5,6,7 | sed 's/\.xml//g' | perl -ne 'print $_ x $ENV{lines}')";
+end="$(paste <(echo "$nam1") <(echo "$nam2") --delimiters '_' | sed 's/^/> Seq_/'| sed 's/$/.fa/' )";
+# aseemble everything ;
+paste <(echo "$star") <(echo "$db") <(echo "$range") <(echo "$end") --delimiters ' ' | grep $gene | head -1; done ; done
+
+Change name of sequences
+for i in $(ls Seq*.fa); do cat $i | sed "s/>.*/>${i} /" | sed 's/\.fa//'| sed 's/,//' | sed 's/whole genome shotgun sequence//' > $(echo $i)2; done
+
+
+
+Assemble in one file only strains that seem to be majority, comM only complete.
+cat Seq_comA_Streptococcus_pneumoniae_*faa2 > ALL_comA.faa
+
+for gene in $(echo ACIAD0360_pilD ACIAD0361_pilC ACIAD0362_pilB ACIAD0558_pilF ACIAD0695_fimT ACIAD0911_pilU ACIAD0912_pilT ACIAD3314_comF ACIAD3315_comE ACIAD3316_comC ACIAD3318_comB ACIAD3319_pilV ACIAD3321_fimU ACIAD3338_comP ACIAD3355_comQ ACIAD3356_comL ACIAD3357_comO ACIAD3359_comN ACIAD3360_pilM ACIAD2639_comA ACIAD3064_comEA ACIAD0209_dprA ACIAD1385_recA ACIAD3449_ssb ACIAD0242_comM) ; do cat Seq*$gene*fa2 > ALL_$gene.fa  ;  done
+
+Align with Clustalw 
+
+Create Hmm profile of alignment
+for i in $(ls ALL*.aln); do echo $i; hmmbuild $(echo $i | sed 's/.aln/.hmm/g') $i ; done
+
+Find homolog on other strain of other species using hmm profile
+hmmsearch ~/Documents/EPFL/Competence_in_NosoPath/GramNEG_competencegenes/Acinetobacter_baumannii/db_prot_genomes/ALL_comM.hmm  ~/Documents/EPFL/Competence_in_NosoPath/GramNEG_competencegenes/Campylobacter_sps/Campylobacter_jejuni_ATCC35925_ASM202830v1_Complete.faa > ~/Documents/EPFL/Competence_in_NosoPath/GramNEG_competencegenes/Campylobacter_sps/Competence_genes_hmm/Campylobacter_jejuni_ATCC35925.out
+
+
+for i in $(ls *.hmm); do echo $i ; for strain in $(ls ~/Documents/EPFL/Competence_in_NosoPath/GramNEG_competencegenes/Campylobacter_sps/*.faa); do echo $strain ; hmmsearch $i $strain > $(echo $strain | cut -d'.' -f1).out ; done; done
+
+
+Look results and Select top hit
+for i in $(ls ACIAD*comM*); do echo $i ; head -30 $i ; done
+
+Select top hit and extract protein in new file Gene_Genus_species_strain.fa
+
+
+Do this to all the proteins.
+
+tBlasn protein to all the strains
+a=0;for i in $(ls *.fa); do echo $(echo $i | cut -d'_' -f1,2,3) ;tblastn -db db_genomes/$(echo $i | cut -d'_' -f1,2,3)_db -outfmt 6 -evalue 1e-50 -show_gis -num_alignments 20 -max_hsps 20 -num_threads 30 -out db_genomes/blastProt_DNA-uptake_$(echo $i | cut -d'_' -f1,2,3).xml -query ~/Documents/EPFL/GramPOS_competencegenes/Genomes/Staphilococcus_aureus/DNA-uptakeGense_Staphylococcus_aureus_ATCC6538.faa ; done
+
+
+
+
+
+Homologs in other species:
+
+Aligned proteins of the samme species and use this for a HMM query on strains of the new species. To confirm we made a blast research of the protein in one organismo on the second organism.
+
+
+
+************************************************************************************************
+***** GENOMIC LOCALIZATION OF COMPETENCE GENES         ************
+*******************3 USING GENOME db *************************333
+************************************************************************************************
+
+Make genome databases of genomes
+mkdir db_genomes
+a=0;for i in $(ls *.fna); do echo $(echo $i | cut -d'_' -f1,2,3) ;makeblastdb -dbtype nucl -in $i -parse_seqids -out db_genomes/$(echo $i | cut -d'_' -f1,2,3)_db ; done
+
+Blastp proteins on genomes
+
+a=0;for i in $(ls *.fna); do echo $(echo $i | cut -d'_' -f1,2,3) ;tblastn -db db_genomes/$(echo $i | cut -d'_' -f1,2,3)_db -outfmt 6 -evalue 1e-6 -show_gis -num_alignments 1 -max_hsps 20 -num_threads 30 -out db_genomes/blastProt_DNA-uptakeInGENOME_$(echo $i | cut -d'_' -f1,2,3).xml -query ~/Documents/EPFL/Competence_in_NosoPath/Reference_Competence_Proteins/List_competence_Acinetobacter_baylyi_prot_V2.faa ; done
+
+
+Plot in R position of Comp Genes. Only comp genes sequences.
+Jkhjk
+
+************************************************************************************************
+*************** GENOMIC IDENTIFICATION OF COMPETENCE GENES     *************
+******************************** USING prokka protein db ***********************************
+************************************************************************************************
+*****************
+*****************
+Evolution of natural competence for transformation in the acinetobacter genus.
+Presence-absence of Type IV pilus, DNA transport and Recombination.
+
+*****************
+*****************
+
+
+Prokka annotation of genomes
+for i in $(ls *.fna); do echo $i;  ~/software/prokka-1.12/prokka/bin/prokka --outdir Annotation_$(echo $i | cut -d'_' -f3) --genus $(echo $i | cut -d'_' -f1) --species $(echo $i | cut -d'_' -f2) --strain $(echo $i | cut -d'_' -f3) --locustag Csp_$(echo $i | cut -d'_' -f3) --prefix $(echo $i | cut -d'_' -f1,2,3)_Prokka --rfam --usegenus $i  ;  done
+
+for i in $(ls *.fa); do echo $i; bsub -q normal -L /bin/bash -J $(echo $i | cut -d'_' -f3) -u ivan.mateusgonzalez@epfl.ch -n 8 -R "rusage[mem=2000]" -M 2000000  -N  " module add UHTS/Analysis/prokka/1.12; module add UHTS/Analysis/rnammer/1.2;  module add UHTS/Analysis/LMAT/1.2.6; module add SequenceAnalysis/HMM-Profile/hmmer/3.1b2; prokka --outdir Annotation_$(echo $i | cut -d'_' -f3) --genus $(echo $i | cut -d'_' -f1) --species $(echo $i | cut -d'_' -f2) --strain $(echo $i | cut -d'_' -f3)  --cpus 8 --locustag Sp_$(echo $i | cut -d'_' -f3) --prefix $(echo $i | cut -d'_' -f1,2,3)_Prokka --rfam --usegenus $i " ;  done
+
+
+make protein database
+mkdir db_Prokka_protein
+a=0;for i in $(ls Annotation*/*.faa); do echo $(echo $i | cut -d'/' -f2|cut -d'_' -f1,2,3) ;makeblastdb -dbtype prot -in $i -parse_seqids -out db_Prokka_protein/$(echo $i | cut -d'/' -f2|cut -d'_' -f1,2,3)_db ; done
+
+Blastp proteins
+a=0;for i in $(ls *.faa); do echo $(echo $i | cut -d'_' -f1,2,3) ;blastp -db db_Prokka_protein/$(echo $i | cut -d'_' -f1,2,3)_db -outfmt 6 -evalue 1e-8 -show_gis -num_alignments 1 -max_hsps 20 -num_threads 30 -out db_Prokka_protein/blastProt_DNA-uptake_$(echo $i | cut -d'_' -f1,2,3).xml -query ~/Documents/EPFL/Competence_in_NosoPath/Reference_Competence_Proteins/List_competence_Acinetobacter_baylyi_prot_V2.faa ; done
+
+
+
+Plot in R position of Comp Genes. Only comp genes sequences.
+jkhjk
+
